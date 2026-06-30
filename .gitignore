@@ -1,0 +1,28 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# Playwright
+.playwright-mcp/
+
+# Debug / temp files
+page_snapshot.md
+snap_*.md
+*.png
+!dashboard.png
+
+# OS
+.DS_Store
+Thumbs.db
