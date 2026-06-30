@@ -1,0 +1,12 @@
+# 深色编辑叙事风主题 — 金+青双色体系
+# 主色 #D4A056, 背景 #0F1119, 卡片 #13161F
+
+[theme]
+primaryColor = "#D4A056"
+backgroundColor = "#0F1119"
+secondaryBackgroundColor = "#13161F"
+textColor = "#E2E8F0"
+font = "sans serif"
+
+[server]
+headless = true
