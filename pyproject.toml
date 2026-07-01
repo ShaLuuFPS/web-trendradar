@@ -1,14 +1,14 @@
 [project]
 name = "trend-radar"
 version = "0.1.0"
-description = "社交媒体热点趋势追踪看板"
+description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
     "apscheduler>=3.11.2",
     "jieba>=0.42.1",
+    "openai>=1.0.0",
     "pandas>=3.0.4",
     "playwright>=1.60.0",
     "snownlp>=0.12.3",
     "streamlit>=1.58.0",
-    "altair>=5.0.0",
 ]

@@ -23,6 +23,9 @@ snap_*.md
 *.png
 !dashboard.png
 
+# Environment / secrets
+.env
+
 # OS
 .DS_Store
 Thumbs.db
