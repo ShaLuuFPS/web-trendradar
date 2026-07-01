@@ -10,9 +10,6 @@ import time
 from datetime import datetime
 
 import requests
-import jieba
-import jieba.analyse
-from snownlp import SnowNLP
 
 # ============================================================
 # 通用工具
@@ -43,31 +40,17 @@ def _safe_get(url: str, headers: dict | None = None, timeout: int = 15) -> reque
     return None
 
 
-def _analyze(title: str) -> tuple[float, str]:
-    """对标题做情感分析 + 关键词提取。"""
-    try:
-        sentiment = SnowNLP(title).sentiments
-    except Exception:
-        sentiment = 0.5
-    try:
-        kw = jieba.analyse.extract_tags(title, topK=3, allowPOS=("n", "v", "a", "ns", "nr"))
-    except Exception:
-        kw = []
-    return round(sentiment, 4), ",".join(kw)
-
-
 def _normalize(raw: dict, platform_name: str) -> dict:
-    """将平台原始数据统一为内部格式，附加情感与关键词。"""
+    """将平台原始数据统一为内部格式，情感值由 AI 模块后续填充。"""
     title = raw.get("title", "")
-    sentiment, keywords = _analyze(title)
     return {
         "rank": raw.get("rank", 0),
         "title": title,
         "url": raw.get("url", ""),
         "hot_score": raw.get("hot_score", 0),
         "raw_data": raw.get("raw_data", {}),
-        "sentiment": sentiment,
-        "keywords": keywords,
+        "sentiment": None,
+        "keywords": None,
     }
 
 
@@ -169,13 +152,14 @@ def fetch_weibo() -> list[dict]:
         "Referer": "https://weibo.com/",
         "Accept": "application/json, text/plain, */*",
     }
+    # 不带 Cookie 也能拿数据，但字段可能不完整
     resp = _safe_get(WEIBO_API, headers=headers)
     if resp is None:
         return []
 
     data = resp.json().get("data", {}).get("realtime", [])
     topics = []
-    for item in data[:50]:
+    for item in data[:30]:
         word = item.get("word", "")
         topics.append(
             _normalize(
@@ -199,7 +183,7 @@ def fetch_weibo() -> list[dict]:
 # B站热门
 # ============================================================
 
-BILIBILI_API = "https://api.bilibili.com/x/web-interface/popular?pn=1&ps=50"
+BILIBILI_API = "https://api.bilibili.com/x/web-interface/popular?pn=1&ps=30"
 
 
 def fetch_bilibili() -> list[dict]:
@@ -227,6 +211,7 @@ def fetch_bilibili() -> list[dict]:
                         "author": item.get("owner", {}).get("name", ""),
                         "tname": item.get("tname", ""),
                         "pubdate": item.get("pubdate", 0),  # Unix 时间戳
+                        "thumb_url": item.get("pic", ""),  # 封面图
                     },
                 },
                 "bilibili",
@@ -281,6 +266,6 @@ def save_to_db(results: dict[str, list[dict]]) -> dict[str, int]:
 
 
 def crawl_and_save(platforms: list[str] | None = None) -> dict[str, int]:
-    """一体化：抓取 + 写入数据库。供 APScheduler 定时任务调用。"""
+    """一体化：抓取 + 写入数据库。AI 分析由调用方异步触发。"""
     results = fetch_all(platforms)
     return save_to_db(results)
