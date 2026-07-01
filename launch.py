@@ -8,8 +8,12 @@ import sys as _sys
 import time as _time
 import re as _re
 import os as _os
+import signal as _signal
 
-STREAMLIT_PORT = 8501
+# 修复中文 Windows GBK 终端下 emoji 输出报错
+_sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+STREAMLIT_PORT = 3000
 STREAMLIT_CMD = [
     _sys.executable, "-m", "streamlit", "run", "main.py",
     "--server.port", str(STREAMLIT_PORT),
@@ -67,7 +71,7 @@ def main() -> None:
         bufsize=1,
     )
 
-    # 等待并解析 tunnel URL
+    # 等待并解析 tunnel URL（拿到地址就立即继续）
     tunnel_url = None
     deadline = _time.time() + 30  # 最多等 30 秒
     try:
@@ -76,7 +80,8 @@ def main() -> None:
             match = TUNNEL_URL_PATTERN.search(line)
             if match:
                 tunnel_url = match.group(0)
-            if _time.time() > deadline and tunnel_url:
+                break  # 拿到地址立刻启动 Streamlit
+            if _time.time() > deadline:
                 break
     except Exception:
         pass
@@ -111,6 +116,7 @@ def main() -> None:
 
     # 等待子进程
     try:
+        # Streamlit 前台输出
         for line in st_proc.stdout:
             print(line.rstrip())
     except KeyboardInterrupt:
