@@ -5,12 +5,24 @@ Streamlit 看板 — 社交媒体热点追踪 v2.0。
 """
 
 import json as _json
+import os
+import socket
 from datetime import datetime as _dt
 from pathlib import Path
 
 import streamlit as st
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+
+# Streamlit Cloud: 将 dashboard secrets 同步到环境变量（必须在 import db 之前）
+try:
+    for _k, _v in st.secrets.items():
+        if _k not in os.environ and isinstance(_v, str):
+            os.environ[_k] = _v
+except Exception:
+    pass
+
+IS_CLOUD = os.getenv("STREAMLIT_CLOUD", "").lower() == "true"
 
 import db
 from db import (
@@ -635,9 +647,13 @@ inject_design_css()
 # ============================================================
 
 init_db()
-scheduler = _get_scheduler()
-next_run = scheduler.get_job("auto_crawl")
-next_time = next_run.next_run_time.strftime("%H:%M") if next_run and next_run.next_run_time else "—"
+if IS_CLOUD:
+    scheduler = None
+    next_time = "GitHub Actions"
+else:
+    scheduler = _get_scheduler()
+    next_run = scheduler.get_job("auto_crawl")
+    next_time = next_run.next_run_time.strftime("%H:%M") if next_run and next_run.next_run_time else "—"
 
 # ============================================================
 # 工具函数
