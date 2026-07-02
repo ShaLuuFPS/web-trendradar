@@ -566,6 +566,33 @@ def insert_analysis(results: list[dict]) -> int:
 
 
 # ============================================================
+# 批量查询 AI 分析
+# ============================================================
+
+
+def get_analysis_batch(topic_keys: list[str]) -> dict[str, dict]:
+    if not topic_keys:
+        return {}
+    conn = get_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """SELECT ta.topic_key, ta.sentiment, ta.label, ta.verdict_short
+                   FROM topic_analysis ta
+                   INNER JOIN (
+                       SELECT topic_key, MAX(captured_at) AS max_cap
+                       FROM topic_analysis
+                       WHERE topic_key = ANY(%s)
+                       GROUP BY topic_key
+                   ) latest ON ta.topic_key = latest.topic_key AND ta.captured_at = latest.max_cap""",
+                (topic_keys,),
+            )
+            return {r["topic_key"]: dict(r) for r in cur.fetchall()}
+    finally:
+        put_conn(conn)
+
+
+# ============================================================
 # Token 用量追踪
 # ============================================================
 

@@ -599,6 +599,34 @@ def insert_analysis(results: list[dict]) -> int:
 
 
 # ============================================================
+# 批量查询 AI 分析
+# ============================================================
+
+
+def get_analysis_batch(topic_keys: list[str]) -> dict[str, dict]:
+    """查询一批 topic_key 的最新 AI 分析结果。
+    返回: {topic_key: {sentiment, label, verdict_short}}
+    """
+    if not topic_keys:
+        return {}
+    conn = get_conn()
+    placeholders = ",".join("?" for _ in topic_keys)
+    rows = conn.execute(
+        f"""SELECT ta.topic_key, ta.sentiment, ta.label, ta.verdict_short
+            FROM topic_analysis ta
+            INNER JOIN (
+                SELECT topic_key, MAX(captured_at) AS max_cap
+                FROM topic_analysis
+                WHERE topic_key IN ({placeholders})
+                GROUP BY topic_key
+            ) latest ON ta.topic_key = latest.topic_key AND ta.captured_at = latest.max_cap""",
+        topic_keys,
+    ).fetchall()
+    conn.close()
+    return {r["topic_key"]: dict(r) for r in rows}
+
+
+# ============================================================
 # Token 用量追踪
 # ============================================================
 

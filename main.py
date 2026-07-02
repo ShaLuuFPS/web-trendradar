@@ -1552,23 +1552,7 @@ sent_dist = get_sentiment_distribution(chart_platform, selected_time)
 if trend_data:
     topic_keys = [t["topic_key"] for t in trend_data]
     if topic_keys:
-        import sqlite3
-        _conn = sqlite3.connect(str(db.DB_PATH))
-        _conn.row_factory = sqlite3.Row
-        _placeholders = ",".join("?" for _ in topic_keys)
-        _sent_rows = _conn.execute(
-            f"""SELECT ta.topic_key, ta.sentiment, ta.label, ta.verdict_short
-                FROM topic_analysis ta
-                INNER JOIN (
-                    SELECT topic_key, MAX(captured_at) AS max_cap
-                    FROM topic_analysis
-                    WHERE topic_key IN ({_placeholders})
-                    GROUP BY topic_key
-                ) latest ON ta.topic_key = latest.topic_key AND ta.captured_at = latest.max_cap""",
-            topic_keys,
-        ).fetchall()
-        _conn.close()
-        _sent_map: dict[str, dict] = {r["topic_key"]: dict(r) for r in _sent_rows}
+        _sent_map = db.get_analysis_batch(topic_keys)
         for t in trend_data:
             s = _sent_map.get(t["topic_key"], {})
             t["ai_sentiment"] = s.get("sentiment", "")

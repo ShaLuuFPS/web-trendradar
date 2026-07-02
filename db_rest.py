@@ -286,6 +286,23 @@ def insert_analysis(results: list[dict]) -> int:
 
 
 # ============================================================
+# 批量查询 AI 分析
+# ============================================================
+
+
+def get_analysis_batch(topic_keys: list[str]) -> dict[str, dict]:
+    if not topic_keys:
+        return {}
+    try:
+        r = _supabase.rpc("get_analysis_batch", {"topic_keys": topic_keys}).execute()
+        if r.data:
+            return {d["topic_key"]: d for d in r.data}
+    except Exception as e:
+        print(f"[db_rest] get_analysis_batch RPC 不可用: {e}")
+    return {}
+
+
+# ============================================================
 # Token 用量追踪
 # ============================================================
 

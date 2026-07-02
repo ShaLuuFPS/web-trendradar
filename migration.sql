@@ -399,6 +399,28 @@ BEGIN
 END;
 $$;
 
+-- 批量查询 AI 分析
+CREATE OR REPLACE FUNCTION get_analysis_batch(
+    topic_keys TEXT[]
+) RETURNS TABLE(
+    topic_key TEXT,
+    sentiment TEXT,
+    label TEXT,
+    verdict_short TEXT
+) LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN QUERY
+    SELECT ta.topic_key, ta.sentiment, ta.label, ta.verdict_short
+    FROM topic_analysis ta
+    INNER JOIN (
+        SELECT topic_key, MAX(captured_at) AS max_cap
+        FROM topic_analysis
+        WHERE topic_key = ANY(topic_keys)
+        GROUP BY topic_key
+    ) latest ON ta.topic_key = latest.topic_key AND ta.captured_at = latest.max_cap;
+END;
+$$;
+
 -- Token 统计
 CREATE OR REPLACE FUNCTION get_token_stats()
 RETURNS JSONB LANGUAGE plpgsql AS $$
@@ -457,3 +479,4 @@ GRANT EXECUTE ON FUNCTION get_weekly_topics TO anon, authenticated, service_role
 GRANT EXECUTE ON FUNCTION get_sentiment_distribution TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION get_unanalyzed_keys TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION get_token_stats TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION get_analysis_batch TO anon, authenticated, service_role;
