@@ -10,7 +10,7 @@ on:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
 
     steps:
       - name: 检出代码
@@ -36,4 +36,20 @@ jobs:
           counts = crawl_and_save()
           total = sum(counts.values())
           print(f'抓取完成: {counts}, 共 {total} 条')
+          "
+
+      - name: AI 舆情分析
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          uv run python -c "
+          import sys, io
+          sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+          from ai_analyzer import run_analysis_all
+          from spider import FETCHERS
+          results = run_analysis_all(list(FETCHERS.keys()))
+          total = sum(results.values())
+          print(f'AI 分析完成: {results}, 共 {total} 条')
           "
