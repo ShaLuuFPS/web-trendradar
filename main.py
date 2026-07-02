@@ -6,7 +6,6 @@ Streamlit 看板 — 社交媒体热点追踪 v2.0。
 
 import json as _json
 import os
-import socket
 from datetime import datetime as _dt, timedelta as _td
 from pathlib import Path
 
@@ -42,7 +41,7 @@ from spider import FETCHERS
 # ============================================================
 
 st.set_page_config(
-    page_title="热点趋势看板",
+    page_title="今日热榜",
     page_icon="🔥",
     layout="wide",
 )
@@ -706,16 +705,16 @@ def sentiment_arrow(topic: dict) -> str:
     return "…"
 
 
-def _style_wind(val: str) -> str:
-    """pandas Styler 回调：根据风向箭头返回对应颜色 + 大号字体。"""
-    base = "font-size: 18px; font-weight: bold; "
-    if val == "▲":
-        return base + "color: #4ECDC4"   # 绿色（正面/上升）
-    elif val == "▼":
-        return base + "color: #E74C3C"   # 红色（负面/下降）
-    elif val == "─":
-        return base + "color: #D4A056"   # 金色（中性/平稳）
-    return ""
+def _is_positive(topic: dict) -> bool:
+    """热点情绪是否为正面。"""
+    return (topic.get("ai_sentiment") == "positive") or \
+           (not topic.get("ai_sentiment") and (topic.get("sentiment") or 0.5) >= 0.6)
+
+
+def _is_negative(topic: dict) -> bool:
+    """热点情绪是否为负面。"""
+    return (topic.get("ai_sentiment") == "negative") or \
+           (not topic.get("ai_sentiment") and (topic.get("sentiment") or 0.5) <= 0.4)
 
 
 def ai_verdict_short(topic: dict) -> str:
@@ -728,20 +727,6 @@ def ai_verdict_short(topic: dict) -> str:
     return "AI 生成中…"
 
 
-def format_hot_score(score: float) -> str:
-    """格式化热度值，带千万/百万标注。"""
-    if score >= 10_000_000:
-        return f"🔥🔥 {score:,.0f}"
-    elif score >= 1_000_000:
-        return f"🔥 {score:,.0f}"
-    return f"{score:,.0f}"
-
-
-def hot_score_megahit(score: float) -> bool:
-    """是否千万级热度。"""
-    return score >= 10_000_000
-
-
 def extract_pubtime(raw_str: str):
     """从 raw_data JSON 提取发布时间 datetime。"""
     try:
@@ -752,12 +737,6 @@ def extract_pubtime(raw_str: str):
     except Exception:
         pass
     return None
-
-
-def format_pubtime(raw_str: str) -> str:
-    """格式化发布时间。"""
-    pt = extract_pubtime(raw_str)
-    return pt.strftime("%m-%d %H:%M") if pt else "实时"
 
 
 def format_freshness(raw_str: str, capture_time: str) -> str:
@@ -777,11 +756,6 @@ def format_freshness(raw_str: str, capture_time: str) -> str:
         else:
             return f"{int(hours / 24)}天前"
     return "—"
-
-
-def rank_badge(rank_val: int) -> str:
-    """排名徽章：Top 3 金色，Top 10 浅灰，其余无标记。"""
-    return str(rank_val)
 
 
 def extract_thumb_url(topic: dict) -> str:
@@ -930,58 +904,53 @@ def generate_verdict(topics: list[dict], platform_name: str) -> str:
     if not topics:
         return "暂无数据，等待自动抓取获取最新热点。"
     count = len(topics)
-    pos = sum(
-        1 for t in topics
-        if (t.get("ai_sentiment") == "positive") or
-           (not t.get("ai_sentiment") and (t.get("sentiment") or 0.5) >= 0.6)
-    )
-    neg = sum(
-        1 for t in topics
-        if (t.get("ai_sentiment") == "negative") or
-           (not t.get("ai_sentiment") and (t.get("sentiment") or 0.5) <= 0.4)
-    )
+    pos = sum(1 for t in topics if _is_positive(t))
+    neg = sum(1 for t in topics if _is_negative(t))
     pos_pct = pos / count * 100
     neg_pct = neg / count * 100
 
     if platform_name == "weibo":
         if pos_pct >= 55:
-            return f"舆论环境偏积极，正面话题占比 {pos_pct:.0f}%，适合内容创作与话题跟进。"
+            return f"今天心情不错，{pos_pct:.0f}% 是好事。"
+        elif neg_pct >= 50:
+            return f"一半人在骂，一半人在看热闹。标准的微博时刻。"
         elif neg_pct >= 30:
-            return f"负面情绪占比 {neg_pct:.0f}%，争议话题集中，建议谨慎选题。"
+            return f"正面 {pos_pct:.0f}%，负面 {neg_pct:.0f}%。吵归吵，不算太糟。"
         else:
-            return f"情绪分布均衡，正面 {pos_pct:.0f}%、中性 {100-pos_pct-neg_pct:.0f}%、负面 {neg_pct:.0f}%。"
+            return f"正面 {pos_pct:.0f}%、负面 {neg_pct:.0f}%，不痛不痒的一天。"
     elif platform_name == "bilibili":
-        avg_views = round(sum(t.get("hot_score", 0) for t in topics) / count) if count else 0
-        if avg_views > 500000:
-            return f"均播放 {avg_views/10000:.0f} 万，内容消费需求旺盛，正面占比 {pos_pct:.0f}%。"
-        elif avg_views > 100000:
-            return f"均播放 {avg_views/10000:.0f} 万，各区表现均衡，用户兴趣多元化。"
+        if pos_pct >= 55:
+            return f"弹幕氛围不错，{pos_pct:.0f}% 的内容让人开心。"
+        elif neg_pct >= 50:
+            return f"评论区里吵得不可开交，负面 {neg_pct:.0f}%。"
+        elif neg_pct >= 30:
+            return f"正面 {pos_pct:.0f}%，负面 {neg_pct:.0f}%。还算和谐。"
         else:
-            return f"播放量平稳，正面占比 {pos_pct:.0f}%，话题有待发酵。"
-    return "数据正常更新中。"
+            return f"不温不火，正面 {pos_pct:.0f}%，没什么大新闻。"
+    elif platform_name == "zhihu":
+        if pos_pct >= 55:
+            return f"今天刷到的都是好消息，正面 {pos_pct:.0f}%。"
+        elif neg_pct >= 50:
+            return f"人均互联网懂王上线，负面 {neg_pct:.0f}%。"
+        elif neg_pct >= 30:
+            return f"正面 {pos_pct:.0f}%，负面 {neg_pct:.0f}%。掰头有，还行。"
+        else:
+            return f"正面 {pos_pct:.0f}%、负面 {neg_pct:.0f}%，逛了一圈没啥大事。"
+    return "还没数据，等等看。"
 
 
 def kpi_section(topics: list[dict]) -> dict:
     """计算 KPI 摘要。"""
     count = len(topics)
-    pos = sum(
-        1 for t in topics
-        if (t.get("ai_sentiment") == "positive") or
-           (not t.get("ai_sentiment") and (t.get("sentiment") or 0.5) >= 0.6)
-    )
-    neg = sum(
-        1 for t in topics
-        if (t.get("ai_sentiment") == "negative") or
-           (not t.get("ai_sentiment") and (t.get("sentiment") or 0.5) <= 0.4)
-    )
-    neu = count - pos - neg
+    pos = sum(1 for t in topics if _is_positive(t))
+    neg = sum(1 for t in topics if _is_negative(t))
     avg_score = round(sum(t.get("hot_score", 0) for t in topics) / count, 1) if count else 0
     megahit_count = sum(1 for t in topics if t.get("hot_score", 0) >= 10_000_000)
     return {
         "count": count,
         "pos": pos,
         "neg": neg,
-        "neu": neu,
+        "neu": count - pos - neg,
         "avg_score": avg_score,
         "pos_pct": round(pos / count * 100) if count else 0,
         "megahit_count": megahit_count,
@@ -993,16 +962,19 @@ def kpi_section(topics: list[dict]) -> dict:
 # ============================================================
 
 with st.sidebar:
-    st.markdown("### 🔥 TrendRadar")
+    st.markdown("### 🔥 今日热榜")
     st.caption(f"⏱ 下次自动抓取: {next_time}")
 
     st.divider()
 
     # 平台选择
-    selected_platform = st.selectbox(
+    st.markdown("#### 🎯 切换平台")
+    selected_platform = st.radio(
         "平台",
         options=list(FETCHERS.keys()),
         format_func=lambda k: PLATFORM_DISPLAY[k],
+        horizontal=True,
+        label_visibility="collapsed",
         key="sidebar_platform",
     )
 
@@ -1452,13 +1424,10 @@ chart_platform = selected_platform
 # Hero 区域 — KPI + VERDICT
 # ============================================================
 
-total_count = len(topics)
-total_pos = sum(
-    1 for t in topics
-    if (t.get("ai_sentiment") == "positive") or
-       (not t.get("ai_sentiment") and (t.get("sentiment") or 0.5) >= 0.6)
-)
-total_megahit = sum(1 for t in topics if t.get("hot_score", 0) >= 10_000_000)
+kpi = kpi_section(topics)
+total_count = kpi["count"]
+total_pos = kpi["pos"]
+total_megahit = kpi["megahit_count"]
 
 st.markdown(f"""
 <h2 style="font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700;
@@ -1485,9 +1454,8 @@ with kpi_cols[2]:
         delta=f"🔥🔥 {total_megahit} 条千万级" if total_megahit else None,
     )
 
-# 总评
+# AI 总评
 verdict_text = generate_verdict(topics, selected_platform)
-verdict_html = f"**{PLATFORM_DISPLAY[selected_platform]}**：{verdict_text}"
 st.markdown(f"""
 <div style="
     background: rgba(19, 22, 31, 0.7);
@@ -1504,12 +1472,12 @@ st.markdown(f"""
         text-transform: uppercase;
         letter-spacing: 0.08em;
         margin-right: 12px;
-    ">总评</span>
+    ">AI 总评</span>
     <span style="
         font-size: 14px;
         color: #94A3B8;
         line-height: 1.8;
-    ">{verdict_html}</span>
+    ">{verdict_text}</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1568,8 +1536,7 @@ if trend_data:
             t["ai_verdict"] = s.get("verdict_short", "")
 
 # 生成当前时间 ISO 供前端"数据更新于"计算
-from datetime import datetime as _dt_now
-_update_iso = _dt_now.now().isoformat()
+_update_iso = _dt.now().isoformat()
 
 # 渲染 ECharts
 echarts_html = render_echarts_chart(trend_data, sent_dist, selected_time, _update_iso)
@@ -1591,7 +1558,6 @@ st.markdown("""
 PAGE_SIZE = 12
 
 capture_time = topics[0].get("captured_at", "未知") if topics else "未知"
-total_count = len(topics)
 
 load_key = f"hot_visible_{selected_platform}"
 if load_key not in st.session_state:
