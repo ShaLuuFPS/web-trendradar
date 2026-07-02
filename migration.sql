@@ -82,8 +82,9 @@ CREATE POLICY "anon_insert_hot_topics" ON hot_topics    FOR INSERT TO anon WITH 
 CREATE POLICY "anon_read_ta"  ON topic_analysis  FOR SELECT TO anon USING (true);
 CREATE POLICY "anon_insert_ta" ON topic_analysis FOR INSERT TO anon WITH CHECK (true);
 
--- token_usage: 公开可读，写入走 service_role 或直连 PG
-CREATE POLICY "anon_read_usage" ON token_usage FOR SELECT TO anon USING (true);
+-- token_usage: 公开可读写
+CREATE POLICY "anon_read_usage"   ON token_usage FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_insert_usage" ON token_usage FOR INSERT TO anon WITH CHECK (true);
 
 -- ============================================================
 -- PostgreSQL RPC 函数（供 REST API 调用复杂查询）

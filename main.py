@@ -7,7 +7,7 @@ Streamlit 看板 — 社交媒体热点追踪 v2.0。
 import json as _json
 import os
 import socket
-from datetime import datetime as _dt
+from datetime import datetime as _dt, timedelta as _td
 from pathlib import Path
 
 import streamlit as st
@@ -634,7 +634,6 @@ def inject_design_css() -> None:
         _next_ten = 0
     _target = _now.replace(minute=_next_ten, second=0, microsecond=0)
     if _next_ten == 0:
-        from datetime import timedelta as _td
         _target += _td(hours=1)
     _refresh_seconds = max(30, int((_target - _now).total_seconds()))
     st.markdown(f'<meta http-equiv="refresh" content="{_refresh_seconds}">', unsafe_allow_html=True)
@@ -647,13 +646,22 @@ inject_design_css()
 # ============================================================
 
 init_db()
+# 计算下一个 10 分钟整点（cron 和 scheduler 对齐）
+_n = _dt.now()
+_nm = ((_n.minute // 10) + 1) * 10
+if _nm >= 60:
+    _next_tick = _n.replace(minute=0, second=0, microsecond=0) + _td(hours=1)
+else:
+    _next_tick = _n.replace(minute=_nm, second=0, microsecond=0)
+_next_tick_str = _next_tick.strftime("%H:%M")
+
 if IS_CLOUD:
     scheduler = None
-    next_time = "GitHub Actions"
+    next_time = f"GitHub Actions · 预计 {_next_tick_str}"
 else:
     scheduler = _get_scheduler()
     next_run = scheduler.get_job("auto_crawl")
-    next_time = next_run.next_run_time.strftime("%H:%M") if next_run and next_run.next_run_time else "—"
+    next_time = next_run.next_run_time.strftime("%H:%M") if next_run and next_run.next_run_time else _next_tick_str
 
 # ============================================================
 # 工具函数

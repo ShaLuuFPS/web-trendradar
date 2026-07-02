@@ -317,14 +317,17 @@ def record_token_usage(
     from pathlib import Path
     timestamp = datetime.now().isoformat()
 
-    _supabase.table("token_usage").insert({
-        "timestamp": timestamp,
-        "model": model,
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "batch_count": batch_count,
-        "cost_estimated": cost_estimated,
-    }).execute()
+    try:
+        _supabase.table("token_usage").insert({
+            "timestamp": timestamp,
+            "model": model,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "batch_count": batch_count,
+            "cost_estimated": cost_estimated,
+        }).execute()
+    except Exception as e:
+        print(f"[db_rest] record_token_usage 写入 Supabase 失败: {e}")
 
     # 追加 JSONL（本地文件）
     jsonl_path = Path(__file__).resolve().parent / "token_usage.jsonl"
