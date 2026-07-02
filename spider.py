@@ -58,62 +58,40 @@ def _normalize(raw: dict, platform_name: str) -> dict:
 # 知乎热榜
 # ============================================================
 
-ZHIHU_HOT_URL = "https://www.zhihu.com/hot"
+ZHIHU_API = "https://www.zhihu.com/api/v3/feed/topstory/hot-list-wx?limit=30"
 
 
-def _fetch_zhihu_playwright() -> list[dict]:
-    """用 Playwright 真实浏览器抓取知乎热榜 — 绕过反爬检测。"""
-    from playwright.sync_api import sync_playwright
+def fetch_zhihu() -> list[dict]:
+    """抓取知乎热榜（微信小程序 API，无需登录）。"""
+    headers = {
+        "Referer": "https://www.zhihu.com/hot",
+        "Accept": "application/json, text/plain, */*",
+    }
+    resp = _safe_get(ZHIHU_API, headers=headers)
+    if resp is None:
+        return []
 
+    items = resp.json().get("data", [])
     topics = []
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/126.0.0.0 Safari/537.36"
-            ),
-        )
-        page.goto(ZHIHU_HOT_URL, wait_until="networkidle", timeout=30000)
-        html = page.content()
-        browser.close()
-
-    # 从页面中提取 <script id="js-initialData" type="text/json">...</script>
-    marker_start = '<script id="js-initialData" type="text/json">'
-    marker_end = "</script>"
-    pos = html.find(marker_start)
-    if pos == -1:
-        print("[spider] 知乎: 未找到 js-initialData")
-        return []
-
-    pos += len(marker_start)
-    end = html.find(marker_end, pos)
-    if end == -1:
-        print("[spider] 知乎: js-initialData 截断")
-        return []
-
-    try:
-        initial_data = json.loads(html[pos:end])
-    except json.JSONDecodeError as e:
-        print(f"[spider] 知乎: JSON 解析失败: {e}")
-        return []
-
-    hot_list = (
-        initial_data.get("initialState", {})
-        .get("topstory", {})
-        .get("hotList", [])
-    )
-    for item in hot_list:
+    for item in items:
         target = item.get("target", {})
-        title = target.get("titleArea", {}).get("text", "") or target.get("title", "")
-        metrics = target.get("metricsArea", {}).get("text", "0")
+        title = target.get("title_area", {}).get("text", "") or target.get("title", "")
+        metrics = target.get("metrics_area", {}).get("text", "0")
         hot_score = 0
         try:
-            hot_str = metrics.replace(" 万热度", "0000").replace(" 万", "0000").replace(",", "").strip()
+            # "899 万热度" → 8990000
+            hot_str = (
+                metrics.replace(" 万热度", "0000")
+                .replace(" 万", "0000")
+                .replace(",", "")
+                .strip()
+            )
             hot_score = int(float(hot_str))
         except (ValueError, TypeError):
             pass
+
+        excerpt = target.get("excerpt_area", {}).get("text", "")
+        answer_count = item.get("feed_specific", {}).get("answer_count", 0)
 
         topics.append(
             _normalize(
@@ -123,20 +101,15 @@ def _fetch_zhihu_playwright() -> list[dict]:
                     "url": target.get("link", {}).get("url", ""),
                     "hot_score": hot_score,
                     "raw_data": {
-                        "excerpt": target.get("excerptArea", {}).get("text", ""),
-                        "answer_count": target.get("answerCount", 0),
-                        "follower_count": target.get("followerCount", 0),
+                        "excerpt": excerpt,
+                        "answer_count": answer_count,
+                        "metrics": metrics,
                     },
                 },
                 "zhihu",
             )
         )
     return topics
-
-
-def fetch_zhihu() -> list[dict]:
-    """抓取知乎热榜（Playwright 浏览器引擎）。"""
-    return _fetch_zhihu_playwright()
 
 
 # ============================================================
@@ -227,7 +200,7 @@ def fetch_bilibili() -> list[dict]:
 FETCHERS = {
     "weibo":    fetch_weibo,
     "bilibili": fetch_bilibili,
-    # "zhihu":    fetch_zhihu,  # 知乎需要登录 Cookie，暂不启用
+    "zhihu":    fetch_zhihu,
 }
 
 

@@ -36,7 +36,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# 定时调度器 — 每 1 分钟抓取
+# 定时调度器 — 每 10 分钟抓取
 # 使用 @st.cache_resource 保证跨 Streamlit 重执行单例。
 # 不能用模块级变量：Streamlit 每次 rerun 会重新执行模块顶层代码，
 # _scheduler = None 会把旧引用清空，导致创建新的 BackgroundScheduler，
@@ -613,8 +613,19 @@ def inject_design_css() -> None:
             font-size: 14px;
         }
     </style>
-    <meta http-equiv="refresh" content="60">
     """, unsafe_allow_html=True)
+
+    # 动态计算刷新间隔：对齐到下一个 */10 分钟节点，与抓取 cron 同频
+    _now = _dt.now()
+    _next_ten = ((_now.minute // 10) + 1) * 10
+    if _next_ten >= 60:
+        _next_ten = 0
+    _target = _now.replace(minute=_next_ten, second=0, microsecond=0)
+    if _next_ten == 0:
+        from datetime import timedelta as _td
+        _target += _td(hours=1)
+    _refresh_seconds = max(30, int((_target - _now).total_seconds()))
+    st.markdown(f'<meta http-equiv="refresh" content="{_refresh_seconds}">', unsafe_allow_html=True)
 
 
 inject_design_css()
@@ -635,6 +646,7 @@ next_time = next_run.next_run_time.strftime("%H:%M") if next_run and next_run.ne
 PLATFORM_DISPLAY = {
     "weibo": "微博热搜",
     "bilibili": "B站热门",
+    "zhihu": "知乎热榜",
 }
 
 # 散点图 10 色调色板 — 高饱和、高对比度，深色背景优化
@@ -1504,11 +1516,11 @@ def _decimate(data_points: list, max_points: int) -> list:
 
 _DECIMATE_LIMITS = {"today": 60, "7days": 80, "week": 60, "month": 100, "year": 120}
 
-# 加载数据：7 天用出现次数 Top N，今日用最新 Top N
+# 加载数据：7 天用出现次数 Top N，今日用全时段排名去重合并
 if selected_time == "7days":
     trend_data = get_weekly_trend_events(chart_platform, top_n=8)
 else:
-    trend_data = get_ranking_trend(chart_platform, selected_time, top_n=5)
+    trend_data = get_ranking_trend(chart_platform, selected_time, top_n=8)
 
 # 对每个事件的数据点做降采样
 _limit = _DECIMATE_LIMITS.get(selected_time, 60)
